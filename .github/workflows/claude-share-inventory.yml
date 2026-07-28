@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 12
     steps:
       - name: Check out collector
         uses: actions/checkout@v4
@@ -27,19 +27,19 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r tools/claude-share-inventory/requirements.txt
 
       - name: Compile collector
-        run: python -m py_compile tools/claude-share-inventory/build_inventory.py tools/claude-share-inventory/run_bounded.py
+        run: python -m py_compile tools/claude-share-inventory/build_inventory.py tools/claude-share-inventory/run_core.py
 
-      - name: Build metadata-only inventory
+      - name: Build guaranteed core inventory
         env:
           GITHUB_TOKEN: ${{ github.token }}
           INVENTORY_OUT: ${{ github.workspace }}/inventory-output
-        run: python tools/claude-share-inventory/run_bounded.py
+        run: python tools/claude-share-inventory/run_core.py
 
       - name: Upload inventory
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: claude-share-inventory
+          name: claude-share-inventory-core
           path: inventory-output/
           if-no-files-found: error
           compression-level: 6
