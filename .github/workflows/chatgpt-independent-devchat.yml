@@ -1,0 +1,45 @@
+name: ChatGPT Independent DevChat Source
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/chatgpt-independent-devchat.yml"
+      - "tools/chatgpt-share-inventory/run_devchat_source.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out collector
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r tools/chatgpt-share-inventory/requirements.txt
+
+      - name: Compile DevChat adapter
+        run: python -m py_compile tools/chatgpt-share-inventory/build_inventory.py tools/chatgpt-share-inventory/run_devchat_source.py
+
+      - name: Import independent DevChat metadata
+        env:
+          INVENTORY_OUT: ${{ github.workspace }}/inventory-output
+        run: python tools/chatgpt-share-inventory/run_devchat_source.py
+
+      - name: Upload DevChat artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-independent-source-devchat
+          path: inventory-output/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 1
