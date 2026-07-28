@@ -1,0 +1,50 @@
+name: ChatGPT Independent Share Discovery
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/chatgpt-independent-discovery.yml"
+      - "tools/chatgpt-share-inventory/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Check out collector
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r tools/chatgpt-share-inventory/requirements.txt
+
+      - name: Compile independent pipeline
+        run: >-
+          python -m py_compile
+          tools/chatgpt-share-inventory/build_inventory.py
+          tools/chatgpt-share-inventory/run_independent_v2.py
+          tools/chatgpt-share-inventory/run_independent_checkpointed.py
+
+      - name: Run independent public discovery
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INVENTORY_OUT: ${{ github.workspace }}/inventory-output
+        run: python tools/chatgpt-share-inventory/run_independent_checkpointed.py
+
+      - name: Upload independent discovery artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-independent-discovery-v2
+          path: inventory-output/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 1
