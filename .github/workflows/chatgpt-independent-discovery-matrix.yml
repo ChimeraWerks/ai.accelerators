@@ -1,0 +1,55 @@
+name: ChatGPT Independent Discovery Matrix
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/chatgpt-independent-discovery-matrix.yml"
+      - "tools/chatgpt-share-inventory/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [archives, code, search, social]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out collector
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r tools/chatgpt-share-inventory/requirements.txt
+
+      - name: Compile group pipeline
+        run: >-
+          python -m py_compile
+          tools/chatgpt-share-inventory/build_inventory.py
+          tools/chatgpt-share-inventory/run_independent_v2.py
+          tools/chatgpt-share-inventory/run_independent_group.py
+
+      - name: Run independent source group
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INVENTORY_OUT: ${{ github.workspace }}/inventory-output
+          DISCOVERY_GROUP: ${{ matrix.group }}
+        run: python tools/chatgpt-share-inventory/run_independent_group.py
+
+      - name: Upload group artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-independent-${{ matrix.group }}
+          path: inventory-output/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 1
