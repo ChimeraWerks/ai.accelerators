@@ -12,6 +12,21 @@ import time
 import build_inventory as collector
 
 
+# Hugging Face's converted configuration is named Simple-ShareGPT. The original
+# collector intentionally keeps source-specific logic centralized, so adapt the
+# config name at this runner boundary without duplicating the ingestion function.
+_original_hf_parquet_files = collector.hf_parquet_files
+
+
+def _patched_hf_parquet_files(dataset: str, config: str | None = None, split: str | None = None):
+    if dataset == "DSULT-Core/ShareGPT-X" and config == "Simple":
+        config = "Simple-ShareGPT"
+    return _original_hf_parquet_files(dataset, config, split)
+
+
+collector.hf_parquet_files = _patched_hf_parquet_files
+
+
 def main() -> int:
     stages = [
         collector.ingest_sharegpt_x,
@@ -26,18 +41,27 @@ def main() -> int:
     ]
     for stage in stages:
         started = time.time()
-        print(json.dumps({"stage": stage.__name__, "status": "start", "at": collector.now()}), flush=True)
+        print(
+            json.dumps({"stage": stage.__name__, "status": "start", "at": collector.now()}),
+            flush=True,
+        )
         stage()
-        print(json.dumps({
-            "stage": stage.__name__,
-            "status": "done",
-            "elapsed_seconds": round(time.time() - started, 2),
-            "unique_urls_so_far": len(collector.entries),
-        }), flush=True)
+        print(
+            json.dumps(
+                {
+                    "stage": stage.__name__,
+                    "status": "done",
+                    "elapsed_seconds": round(time.time() - started, 2),
+                    "unique_urls_so_far": len(collector.entries),
+                }
+            ),
+            flush=True,
+        )
 
     data = collector.rows()
     summary = collector.make_summary(data)
     summary["run_profile"] = "sharegpt_x_measured_core_plus_fast_free_indexes"
+    summary["sharegpt_x_parquet_config"] = "Simple-ShareGPT/full"
     summary["omitted_from_fallback_run"] = [
         "huggingface_sharechat_derivative",
         "wayback_cdx",
