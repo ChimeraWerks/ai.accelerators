@@ -1,46 +1,44 @@
-name: Claude Share Inventory Multi-Index
+name: Claude Share Inventory Artifact History
 
 on:
   pull_request:
     paths:
       - ".github/workflows/claude-share-inventory.yml"
-      - "tools/claude-share-inventory/**"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
-  build:
+  list-history:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - name: Check out collector
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check -r tools/claude-share-inventory/requirements.txt
-
-      - name: Compile collector
-        run: python -m py_compile tools/claude-share-inventory/build_inventory.py tools/claude-share-inventory/run_bounded.py tools/claude-share-inventory/run_core.py
-
-      - name: Build bounded multi-index inventory
+      - name: Export workflow runs and artifacts
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          INVENTORY_OUT: ${{ github.workspace }}/inventory-output
-        run: python tools/claude-share-inventory/run_bounded.py
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p history
+          gh api --paginate "repos/$REPO/actions/workflows/322201383/runs?per_page=100" > history/workflow-runs.json
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          runs = json.loads(Path('history/workflow-runs.json').read_text()).get('workflow_runs', [])
+          out = []
+          for run in runs:
+              rid = run['id']
+              raw = subprocess.check_output(['gh','api',f"repos/{os.environ['REPO']}/actions/runs/{rid}/artifacts?per_page=100"], text=True)
+              payload = json.loads(raw)
+              out.append({'run': run, 'artifacts': payload.get('artifacts', [])})
+          Path('history/workflow-history.json').write_text(json.dumps(out, indent=2), encoding='utf-8')
+          PY
 
-      - name: Upload inventory
-        if: always()
+      - name: Upload history
         uses: actions/upload-artifact@v4
         with:
-          name: claude-share-inventory-multi-index
-          path: inventory-output/
+          name: claude-share-inventory-workflow-history
+          path: history/
           if-no-files-found: error
-          compression-level: 6
           retention-days: 1
