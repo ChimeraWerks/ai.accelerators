@@ -2,11 +2,54 @@
 """Run one isolated source group for independent ChatGPT share discovery."""
 from __future__ import annotations
 
+import html as html_lib
 import json
 import os
+from urllib.parse import unquote
 
 import build_inventory as collector
 import run_independent_v2 as run
+
+
+# Search engines and public indexes frequently wrap destinations in percent-encoded
+# redirects, JSON slash escaping, or repeated HTML encoding. Expand those reversible
+# representations before applying the canonical share-URL regex. This affects only
+# extraction from independently queried source responses; it does not import a URL list.
+_base_extract_urls = run.extract_urls
+
+
+def _decoded_extract_urls(value):
+    if value is None:
+        return set()
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="replace")
+    elif isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except Exception:
+            text = str(value)
+
+    variants = {text, html_lib.unescape(text), text.replace("\\/", "/")}
+    for _ in range(4):
+        expanded = set()
+        for candidate in variants:
+            expanded.add(unquote(candidate))
+            expanded.add(html_lib.unescape(candidate))
+            expanded.add(candidate.replace("\\/", "/"))
+        if expanded.issubset(variants):
+            break
+        variants.update(expanded)
+
+    found = set()
+    for candidate in variants:
+        found.update(_base_extract_urls(candidate))
+    return found
+
+
+run.extract_urls = _decoded_extract_urls
+
 
 GROUPS = {
     "archives": [
@@ -51,6 +94,7 @@ def checkpoint(group: str, stage_name: str) -> None:
         "source_group": group,
         "checkpoint_after_stage": stage_name,
         "huggingface_or_prior_inventory_used_as_input": False,
+        "encoded_url_expansion": "iterative percent, HTML, and JSON slash decoding",
     })
     (collector.OUT / "chatgpt-independent-candidate-urls.txt").write_text(
         "\n".join(row["url"] for row in data) + ("\n" if data else ""),
@@ -78,6 +122,7 @@ def main() -> int:
     summary_path = collector.OUT / "coverage-summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     summary["source_group"] = group
+    summary["encoded_url_expansion"] = "iterative percent, HTML, and JSON slash decoding"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
 
