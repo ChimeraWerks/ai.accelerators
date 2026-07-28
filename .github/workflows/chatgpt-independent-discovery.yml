@@ -1,10 +1,8 @@
 name: ChatGPT Independent Share Discovery
 
+# Broad checkpointed run retained for explicit manual reproduction. The source-isolated
+# workflow is used for active pull-request research so individual endpoints cannot block it.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/chatgpt-independent-discovery.yml"
-      - "tools/chatgpt-share-inventory/**"
   workflow_dispatch:
 
 permissions:
